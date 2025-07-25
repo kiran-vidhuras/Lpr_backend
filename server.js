@@ -11,6 +11,10 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const addressRoutes = require('./routes/addressRoutes'); 
 const stockRoutes = require('./routes/stockRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const updateRoutes = require('./routes/updateRoutes');
+const awardRoutes = require("./routes/awardRoutes")
+
+
 const app = express();
 
 app.use(cors());
@@ -34,6 +38,9 @@ app.use('/api/address', addressRoutes);
 
 app.use('/api/orders' , orderRoutes);
 
+app.use('/api/updates', updateRoutes);
+
+app.use('/api/awards', awardRoutes);
 
 // Database connection
 async function connectDB() {
