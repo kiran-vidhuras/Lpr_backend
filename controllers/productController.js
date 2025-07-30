@@ -1,6 +1,5 @@
-
 const Product = require("../models/Product");
-const { cloudinary } = require('../config/cloudinary');
+const { cloudinary } = require("../config/cloudinary");
 
 // @desc    Add new product
 exports.addProduct = async (req, res) => {
@@ -8,10 +7,11 @@ exports.addProduct = async (req, res) => {
     const {
       name,
       description,
+      awardByTitle,
       ingredients,
       uses,
       variants,
-      category // 👈 NEW
+      category,
     } = req.body;
 
     const files = req.files;
@@ -23,7 +23,7 @@ exports.addProduct = async (req, res) => {
 
     const imageUpload = await cloudinary.uploader.upload(imageFile.path);
 
-    let logoUploadUrl = '';
+    let logoUploadUrl = "";
     const logoFile = files?.productLogo?.[0];
     if (logoFile) {
       const logoUpload = await cloudinary.uploader.upload(logoFile.path);
@@ -35,12 +35,13 @@ exports.addProduct = async (req, res) => {
     const product = new Product({
       name,
       description,
+      awardByTitle,
       ingredients,
       uses,
-      category, // 👈 SAVE CATEGORY
+      category,
       image: imageUpload.secure_url,
       productLogo: logoUploadUrl || null,
-      variants: parsedVariants
+      variants: parsedVariants,
     });
 
     await product.save();
@@ -51,29 +52,28 @@ exports.addProduct = async (req, res) => {
   }
 };
 
-// @desc    Get all products (with optional category filter)
+// @desc    Get all products
 exports.getAllProducts = async (req, res) => {
   try {
     const { category } = req.query;
     const filter = category ? { category } : {};
-
     const products = await Product.find(filter).sort({ createdAt: -1 });
     res.json(products);
   } catch (err) {
-    console.error('Error fetching products:', err);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Error fetching products:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-// @desc    Get single product by ID
+// @desc    Get product by ID
 exports.getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ message: 'Product not found' });
+    if (!product) return res.status(404).json({ message: "Product not found" });
     res.json(product);
   } catch (err) {
-    console.error('Error getting product:', err);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Error getting product:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -86,20 +86,27 @@ exports.updateProduct = async (req, res) => {
     const {
       name,
       description,
+      awardByTitle,
       ingredients,
       uses,
       variants,
-      category // 👈 UPDATE SUPPORT
+      category,
     } = req.body;
 
-    // Update text fields
-    if (name) product.name = name;
-    if (description) product.description = description;
-    if (ingredients) product.ingredients = ingredients;
-    if (uses) product.uses = uses;
-    if (category) product.category = category;
+    // You can now use awardByTitle directly
+    if (!awardByTitle || awardByTitle.trim() === "") {
+      return res.status(400).json({ message: "Please enter Awarded By Title" });
+    }
 
-    // Parse and update variants
+    // Update fields if provided
+    if (awardByTitle !== undefined) product.awardByTitle = awardByTitle;
+    if (name !== undefined) product.name = name;
+    if (description !== undefined) product.description = description;
+    if (ingredients !== undefined) product.ingredients = ingredients;
+    if (uses !== undefined) product.uses = uses;
+    if (category !== undefined) product.category = category;
+
+    // Parse variants
     if (variants) {
       try {
         product.variants = JSON.parse(variants);
@@ -108,6 +115,7 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
+    // Handle new file uploads
     const files = req.files;
     const imageFile = files?.image?.[0];
     const logoFile = files?.productLogo?.[0];
@@ -129,8 +137,8 @@ exports.updateProduct = async (req, res) => {
     await product.save();
     res.json(product);
   } catch (err) {
-    console.error('Error updating product:', err);
-    res.status(500).json({ message: 'Error updating product' });
+    console.error("Error updating product:", err);
+    res.status(500).json({ message: "Error updating product" });
   }
 };
 
@@ -140,10 +148,10 @@ exports.deleteProduct = async (req, res) => {
     await Product.findByIdAndDelete(req.params.id);
     res.json({ message: "Product deleted" });
   } catch (error) {
+    console.error("Delete failed:", error.message);
     res.status(500).json({ error: error.message });
   }
 };
-
 
 // const Product = require("../models/Product");
 // const { cloudinary } = require('../config/cloudinary');
@@ -193,8 +201,6 @@ exports.deleteProduct = async (req, res) => {
 //     res.status(500).json({ error: err.message });
 //   }
 // };
-
-
 
 // // @desc    Get all products
 // exports.getAllProducts = async (req, res) => {
@@ -263,7 +269,6 @@ exports.deleteProduct = async (req, res) => {
 //         console.error("Logo upload failed:", err.message);
 //       }
 //     }
-
 
 //     await product.save();
 //     res.json(product);

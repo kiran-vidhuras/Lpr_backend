@@ -11,17 +11,13 @@
 //   getProductById
 // } = require("../controllers/productController");
 
-
-
 // // router.post('/add', verifyToken, upload.single('image'), addProduct);
-
 
 // router.post("/add", protect("admin"), upload.single("image"), addProduct);
 // router.get("/", getAllProducts);
 // router.delete("/:id", protect("admin"), deleteProduct);
 // router.put("/:id", protect("admin"), upload.single("image"), updateProduct);
 // router.get('/:id', getProductById);
-
 
 // router.post(
 //   "/add",
@@ -37,7 +33,6 @@
 //   updateProduct
 // );
 
-
 // module.exports = router;
 
 const express = require("express");
@@ -49,7 +44,7 @@ const {
   getAllProducts,
   deleteProduct,
   updateProduct,
-  getProductById
+  getProductById,
 } = require("../controllers/productController");
 
 router.post(
@@ -57,7 +52,8 @@ router.post(
   protect("admin"),
   upload.fields([
     { name: "image", maxCount: 1 },
-    { name: "productLogo", maxCount: 1 }
+    { name: "productLogo", maxCount: 1 },
+    { name: "awardByTitle", maxCount: 1 },
   ]),
   addProduct
 );
@@ -67,7 +63,8 @@ router.put(
   protect("admin"),
   upload.fields([
     { name: "image", maxCount: 1 },
-    { name: "productLogo", maxCount: 1 }
+    { name: "productLogo", maxCount: 1 },
+    { name: "awardByTitle", maxCount: 1 },
   ]),
   updateProduct
 );
