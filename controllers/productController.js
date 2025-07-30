@@ -83,23 +83,9 @@ exports.updateProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    const {
-      name,
-      description,
-      awardByTitle,
-      ingredients,
-      uses,
-      variants,
-      category,
-    } = req.body;
+    const { name, description, ingredients, uses, variants, category } =
+      req.body;
 
-    // You can now use awardByTitle directly
-    if (!awardByTitle || awardByTitle.trim() === "") {
-      return res.status(400).json({ message: "Please enter Awarded By Title" });
-    }
-
-    // Update fields if provided
-    if (awardByTitle !== undefined) product.awardByTitle = awardByTitle;
     if (name !== undefined) product.name = name;
     if (description !== undefined) product.description = description;
     if (ingredients !== undefined) product.ingredients = ingredients;

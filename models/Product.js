@@ -11,7 +11,6 @@ const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     image: { type: String, required: true }, // URL or base64
-    awardByTitle: { type: String }, // Optional — fine
     productLogo: { type: String }, // Optional — fine
     description: { type: String }, // Optional — may want required if shown in UI
     ingredients: { type: String, required: true },
