@@ -1,14 +1,45 @@
-const mongoose = require("mongoose");
+const { Sequelize, DataTypes, Model } = require('sequelize');
 
-const contactSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String },
-    message: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now },
+// Initialize Sequelize (adjust credentials)
+const sequelize = new Sequelize('LPR_Organics', 'lpr_organics', 'Lprorganics@123', {
+  host: 'localhost',
+  dialect: 'mysql',
+});
+
+class Contact extends Model {}
+
+Contact.init({
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
   },
-  { timestamps: true }
-);
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  phone: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  message: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  createdAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: Sequelize.NOW,
+  },
+  updatedAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: Sequelize.NOW,
+  },
+}, {
+  sequelize,
+  modelName: 'Contact',
+  tableName: 'contacts',
+  timestamps: true, // automatically adds and manages createdAt and updatedAt
+});
 
-module.exports = mongoose.model("Contact", contactSchema);
+module.exports = { Contact, sequelize };

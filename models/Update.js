@@ -1,14 +1,30 @@
-const mongoose = require("mongoose");
+const { Sequelize, DataTypes, Model } = require('sequelize');
+const sequelize = require('../config/database'); // Your Sequelize instance
 
-const updateSchema = new mongoose.Schema(
-  {
-    title: { type: String, required: true },
-    awardByTitle: { type: String },
-    content: { type: String, required: true },
-    youtubeLink: { type: String },
-    createdAt: { type: Date, default: Date.now },
+class Update extends Model {}
+
+Update.init({
+  title: {
+    type: DataTypes.STRING,
+    allowNull: false,
   },
-  { timestamps: true }
-);
+  awardByTitle: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  content: {
+    type: DataTypes.TEXT,  // For longer text content
+    allowNull: false,
+  },
+  youtubeLink: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  }
+}, {
+  sequelize,
+  modelName: 'Update',
+  tableName: 'updates',
+  timestamps: true,  // Adds createdAt and updatedAt automatically
+});
 
-module.exports = mongoose.model("Update", updateSchema);
+module.exports = { Update };

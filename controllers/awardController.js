@@ -1,58 +1,70 @@
+const Award = require('../models/awards'); // Sequelize model
 
-const Award = require("../models/Awards.js");
-
+// GET all awards
 exports.getAllAwards = async (req, res) => {
-  const awards = await Award.find().sort({ year: -1 });
-  res.json(awards);
+  try {
+    const awards = await Award.findAll({ order: [['year', 'DESC']] });
+    res.json(awards);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
+// CREATE award
 exports.createAward = async (req, res) => {
-  const { title, year, awardedBy, category, description } = req.body;
+  try {
+    const { title, year, awardedBy, category, description } = req.body;
 
-  if (!title || !year || !category || !description) {
-    return res.status(400).json({ message: 'Required fields missing' });
+    if (!title || !year || !category || !description) {
+      return res.status(400).json({ message: 'Required fields missing' });
+    }
+
+    const imageUrl = req.file ? req.file.path : "";
+
+    const award = await Award.create({
+      title,
+      year,
+      awardedBy,
+      category,
+      image: imageUrl,
+      description
+    });
+
+    res.status(201).json(award);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  const imageUrl = req.file ? req.file.path : "";
-
-  const award = await Award.create({
-    title,
-    year,
-    awardedBy,
-    category,
-    image: imageUrl,
-    description,
-  });
-
-  res.status(201).json(award);
 };
 
+// UPDATE award
+// filepath: c:\Users\vsoft\Desktop\Lpr-deploy (3)\Lpr-deploy (2)\Lpr-deploy\backend\controllers\awardController.js
 exports.updateAward = async (req, res) => {
-  const award = await Award.findById(req.params.id);
-  if (!award) return res.status(404).json({ message: 'Award not found' });
+  try {
+    const award = await Award.findByPk(req.params.id);
+    if (!award) return res.status(404).json({ message: "Award not found" });
 
-  const { title, year, awardedBy, category, description } = req.body;
-
-  award.title = title || award.title;
-  award.year = year || award.year;
-  award.awardedBy = awardedBy || award.awardedBy;
-  award.category = category || award.category;
-  award.description = description || award.description;
-
-  // Optional: if new image uploaded
-  if (req.file) {
-    award.image = req.file.path;
+    award.title = req.body.title;
+    award.description = req.body.description;
+    if (req.file) {
+      award.image = req.file.path; // or cloudinary url
+    }
+    await award.save();
+    res.json(award);
+  } catch (err) {
+    console.error("Error updating award:", err);
+    res.status(500).json({ message: "Error updating award" });
   }
-
-  await award.save();
-  res.json(award);
 };
 
-
+// DELETE award
 exports.deleteAward = async (req, res) => {
-  const award = await Award.findById(req.params.id);
-  if (!award) return res.status(404).json({ message: 'Award not found' });
+  try {
+    const award = await Award.findByPk(req.params.id);
+    if (!award) return res.status(404).json({ message: 'Award not found' });
 
-  await award.deleteOne();
-  res.json({ message: 'Award deleted successfully' });
+    await award.destroy();
+    res.json({ message: 'Award deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };

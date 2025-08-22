@@ -9,7 +9,7 @@ router.post('/save', protect(), async (req, res) => {
   const { address } = req.body;
 
   try {
-    let existing = await Address.findOne({ userId });
+    let existing = await Address.findOne({ where: { userId } });
     if (existing) {
       existing.address = address;
       await existing.save();
@@ -23,18 +23,14 @@ router.post('/save', protect(), async (req, res) => {
   }
 });
 
-
-
 // GET /api/address/user/:id
 router.get('/user/:id', protect(), async (req, res) => {
   try {
-    const saved = await Address.findOne({ userId: req.params.id });
+    const saved = await Address.findOne({ where: { userId: req.params.id } });
     res.json({ address: saved?.address || null });
   } catch (err) {
     res.status(500).json({ address: null });
   }
 });
-
-
 
 module.exports = router;

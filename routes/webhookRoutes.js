@@ -1,13 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const {
-  razorpayWebhookHandler,
-} = require("../controllers/paymentWebhookController");
+const { razorpayWebhookHandler } = require("../controllers/paymentWebhookController");
 
-// Use raw body parser just for Razorpay webhook
+// Use raw body parser just for Razorpay webhook at path "/"
 router.post(
-  "/webhook",
-  express.raw({ type: "application/json" }), // important
+  "/",
+  express.raw({ type: "application/json" }), // Important for webhook signature verification
   razorpayWebhookHandler
 );
 

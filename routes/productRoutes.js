@@ -35,6 +35,7 @@
 
 // module.exports = router;
 
+
 const express = require("express");
 const router = express.Router();
 const upload = require("../middleware/multer");
@@ -53,7 +54,6 @@ router.post(
   upload.fields([
     { name: "image", maxCount: 1 },
     { name: "productLogo", maxCount: 1 },
-    { name: "awardByTitle", maxCount: 1 },
   ]),
   addProduct
 );
@@ -64,7 +64,6 @@ router.put(
   upload.fields([
     { name: "image", maxCount: 1 },
     { name: "productLogo", maxCount: 1 },
-    { name: "awardByTitle", maxCount: 1 },
   ]),
   updateProduct
 );

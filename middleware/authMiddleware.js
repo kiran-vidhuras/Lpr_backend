@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User"); // Make sure this is imported
+const User = require("../models/User");
+
 
 exports.protect = (roles = []) => {
   if (typeof roles === "string") roles = [roles];
@@ -16,18 +17,16 @@ exports.protect = (roles = []) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // ✅ Load full user from DB using ID from token
-      const user = await User.findById(decoded.id).select("-password");
+      // Sequelize version
+      const user = await User.findByPk(decoded.id, {
+        attributes: { exclude: ["password"] }
+      });
 
       if (!user) {
         return res.status(401).json({ message: "User not found" });
       }
 
-      req.user = user; // 👈 full user object
-
-      if (process.env.NODE_ENV === "development") {
-        console.log("Authenticated User:", req.user);
-      }
+      req.user = user;
 
       const userRole = user.role?.toLowerCase();
       const allowedRoles = roles.map((r) => r.toLowerCase());
@@ -39,9 +38,7 @@ exports.protect = (roles = []) => {
       next();
     } catch (error) {
       if (error.name === "TokenExpiredError") {
-        return res
-          .status(401)
-          .json({ message: "Token expired. Please login again." });
+        return res.status(401).json({ message: "Token expired. Please login again." });
       }
       return res.status(401).json({ message: "Not authorized, token failed" });
     }

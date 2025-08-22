@@ -1,122 +1,175 @@
 const express = require("express");
 const router = express.Router();
-const Order = require("../models/Orders");
+const pool = require("../config/database"); // MySQL connection pool
 const { protect } = require("../middleware/authMiddleware");
 
-// POST /api/orders - create order (after payment success)
-
+// POST /api/orders - Create a new order (after payment success)
 router.post("/", protect(), async (req, res) => {
   try {
     const { cartItems, address, amount } = req.body;
 
-    const newOrder = new Order({
-      user: req.user._id, // ✅ pulled from token, not frontend
-      cartItems,
-      address,
-      amount,
-      status: "Processing",
-    });
+    // Insert new order into DB
+    const [result] = await pool.query(
+      `INSERT INTO orders (user_id, address, amount, status, created_at) 
+       VALUES (?, ?, ?, 'Processing', NOW())`,
+      [req.user.id, address, amount]
+    );
 
-    await newOrder.save();
-    res.json({ success: true, order: newOrder });
+    const orderId = result.insertId;
+
+    // Save cart items in a separate table (order_items)
+    for (let item of cartItems) {
+      await pool.query(
+        `INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)`,
+        [orderId, item.productId, item.quantity]
+      );
+    }
+
+    res.json({ success: true, orderId });
   } catch (err) {
     console.error("Order creation error:", err);
     res.status(500).json({ success: false, message: "Order creation failed" });
   }
 });
 
-// PATCH /api/orders/:id/status - update order status (admin only)
+// PATCH /api/orders/:id/status - Update order status (admin only)
 router.patch("/:id/status", protect("admin"), async (req, res) => {
   const { status } = req.body;
   try {
-    const updateData = { status };
-
+    let deliveredAt = null;
     if (status === "Delivered") {
-      updateData.deliveredAt = new Date(); // set current time
+      deliveredAt = new Date();
     }
 
-    const order = await Order.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-    }).populate("user", "name");
+    const [result] = await pool.query(
+      `UPDATE orders SET status = ?, delivered_at = ? WHERE id = ?`,
+      [status, deliveredAt, req.params.id]
+    );
 
-    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Order not found" });
+    }
 
-    res.json(order);
+    // Fetch updated order with user info
+    const [order] = await pool.query(
+      `SELECT o.*, u.name 
+       FROM orders o 
+       JOIN users u ON o.user_id = u.id 
+       WHERE o.id = ?`,
+      [req.params.id]
+    );
+
+    res.json(order[0]);
   } catch (err) {
-    console.error(err);
+    console.error("Error updating order:", err);
     res.status(500).json({ message: "Failed to update order status" });
   }
 });
 
-// router.get("/user/:id", protect(), async (req, res) => {
-//   const { _id } = req.params;
-//   try {
-//     const orders = await Order.find({ userId: _id });
-//     res.json(orders);
-//   } catch (err) {
-//     res.status(500).json({ message: "Failed to fetch orders" });
-//   }
-// });
-
-router.get("/user/:id", protect(), async (req, res) => {
-  const requestedUserId = req.params.id;
-
-  // ✅ Security check: only allow access to own orders
-  if (req.user._id.toString() !== requestedUserId) {
-    return res.status(403).json({ message: "Access denied" });
-  }
+// GET /api/orders/user/:userId - Fetch user's orders
+router.get("/user/:userId", async (req, res) => {
+  const { userId } = req.params;
+  const db = req.app.locals.db;
 
   try {
-    const orders = await Order.find({ user: requestedUserId }).sort({
-      createdAt: -1,
+    const [orders] = await db.query(
+      `SELECT * 
+       FROM confirmed_orders
+       WHERE user_id = ?
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    // Parse cart_json into items array
+    const formattedOrders = orders.map(order => ({
+      ...order,
+      items: JSON.parse(order.cart_json || "[]"),
+      address: JSON.parse(order.address_json || "{}"),
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: formattedOrders,
     });
-    res.json(orders);
-  } catch (err) {
-    console.error("Error fetching orders:", err);
-    res.status(500).json({ message: "Failed to fetch orders" });
+  } catch (error) {
+    console.error("❌ Error fetching orders:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch orders",
+    });
   }
 });
 
-// GET /api/orders - all orders (admin only)
+
+// GET /api/orders - Fetch all orders (admin only)
 router.get("/", protect("admin"), async (req, res) => {
   try {
-    const orders = await Order.find()
-      .populate("user", "name email")
-      .sort({ createdAt: -1 });
-    res.json(orders);
+    const [orders] = await pool.query(
+      `SELECT o.*, u.name, u.email, u.role
+       FROM confirmed_orders o
+       JOIN users u ON o.user_id = u.id
+       ORDER BY o.created_at DESC`
+    );
+
+    // Parse JSON columns for each order
+    const formattedOrders = orders.map(order => ({
+      ...order,
+      address: order.address_json ? JSON.parse(order.address_json) : {},
+      cartItems: order.cart_json ? JSON.parse(order.cart_json) : [],
+      user: {
+        id: order.user_id,
+        name: order.name,
+        email: order.email,
+        role: order.role,
+      }
+    }));
+
+    res.json(formattedOrders);
   } catch (err) {
+    console.error("Error fetching all orders:", err);
     res.status(500).json({ message: "Failed to fetch orders" });
   }
 });
-
 module.exports = router;
 
-// // 📁 backend/routes/orderRoutes.js
+
 // const express = require("express");
 // const router = express.Router();
-// const Order = require("../models/Orders");
-// const { protect } = require("../middleware/authMiddleware");
+// const Order = require("../models/Orders");  // Import the Order model
+// const { protect } = require("../middleware/authMiddleware");  // Import protect middleware
 
-// // ✅ Create order after successful payment (from frontend)
+// // POST /api/orders - Create a new order (after payment success)
 // router.post("/", protect(), async (req, res) => {
 //   try {
-//     const newOrder = new Order(req.body);
+//     const { cartItems, address, amount } = req.body;
+
+//     const newOrder = new Order({
+//       user: req.user.id,  // The user ID comes from the JWT token (protected route)
+//       cartItems,
+//       address,
+//       amount,
+//       status: "Processing",  // Default status
+//     });
+
 //     await newOrder.save();
 //     res.json({ success: true, order: newOrder });
 //   } catch (err) {
-//     console.error(err);
+//     console.error("Order creation error:", err);
 //     res.status(500).json({ success: false, message: "Order creation failed" });
 //   }
 // });
 
-// // ✅ Update order status (admin only)
+// // PATCH /api/orders/:id/status - Update order status (admin only)
 // router.patch("/:id/status", protect("admin"), async (req, res) => {
 //   const { status } = req.body;
+
 //   try {
 //     const updateData = { status };
+
 //     if (status === "Delivered") {
-//       updateData.deliveredAt = new Date();
+//       updateData.deliveredAt = new Date();  // Set the current time when delivered
 //     }
+
 //     const order = await Order.findByIdAndUpdate(req.params.id, updateData, {
 //       new: true,
 //     }).populate("user", "name");
@@ -130,81 +183,41 @@ module.exports = router;
 //   }
 // });
 
-// // ✅ Get logged-in user's orders
-// router.get("/user/:id", protect(), async (req, res) => {
+// router.get("/user/:userId", protect(), async (req, res) => {
+//   const requestedUserId = req.params.userId;
+
+//   console.log("Requested User ID:", requestedUserId);  // Log to check the incoming user ID
+//   console.log("Authenticated User ID:", req.user ? req.user.id : "No user"); // Check if the user ID from the token matches
+
+//   // ✅ Security check: only allow access to own orders
+//   if (!req.user || !req.user.id || req.user.id.toString() !== requestedUserId) {
+//     return res.status(403).json({ message: "Access denied" });
+//   }
+
 //   try {
-//     const orders = await Order.find({ user: req.params.id }).sort({
+//     const orders = await Order.find({ user: requestedUserId }).sort({
 //       createdAt: -1,
 //     });
+//     console.log("Fetched Orders:", orders); // Log the fetched orders
 //     res.json(orders);
 //   } catch (err) {
-//     console.error("Error fetching user orders:", err);
+//     console.error("Error fetching orders:", err); // Log the error
 //     res.status(500).json({ message: "Failed to fetch orders" });
 //   }
 // });
 
-// // ✅ Get all orders (admin only)
+
+// // GET /api/orders - Fetch all orders (admin only)
 // router.get("/", protect("admin"), async (req, res) => {
 //   try {
 //     const orders = await Order.find()
-//       .populate("user", "name email")
+//       .populate("user", "name email")  // Optionally populate user info
 //       .sort({ createdAt: -1 });
+
 //     res.json(orders);
 //   } catch (err) {
 //     res.status(500).json({ message: "Failed to fetch orders" });
 //   }
 // });
-
-// // ✅ Webhook for Razorpay to create fallback order if not saved from frontend
-// router.post(
-//   "/webhook",
-//   express.raw({ type: "application/json" }),
-//   async (req, res) => {
-//     const crypto = require("crypto");
-//     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
-//     const signature = req.headers["x-razorpay-signature"];
-//     const body = req.body;
-//     const generatedSignature = crypto
-//       .createHmac("sha256", secret)
-//       .update(JSON.stringify(body))
-//       .digest("hex");
-
-//     if (signature !== generatedSignature) {
-//       return res
-//         .status(400)
-//         .json({ success: false, message: "Invalid signature" });
-//     }
-
-//     try {
-//       if (body.event === "payment.captured") {
-//         const { id, amount, notes } = body.payload.payment.entity;
-//         const userId = notes.userId;
-//         const cartItems = JSON.parse(notes.cartItems);
-//         const address = JSON.parse(notes.address);
-
-//         const newOrder = new Order({
-//           user: userId,
-//           cartItems,
-//           address,
-//           amount: amount / 100, // convert paise to rupees
-//           status: "Processing",
-//         });
-
-//         await newOrder.save();
-//         return res.status(200).json({ success: true });
-//       } else {
-//         return res
-//           .status(200)
-//           .json({ success: true, message: "Unhandled event" });
-//       }
-//     } catch (err) {
-//       console.error("Webhook error:", err);
-//       res
-//         .status(500)
-//         .json({ success: false, message: "Webhook processing failed" });
-//     }
-//   }
-// );
 
 // module.exports = router;

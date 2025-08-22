@@ -1,83 +1,142 @@
-const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const nodemailer = require("nodemailer");
 
-
+// Helper to generate JWT token
 const generateToken = (user) => {
   return jwt.sign(
-    { id: user._id, role: user.role },
+    { id: user.id, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: "1d" }
   );
 };
 
+// Register user
 exports.register = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const db = req.app.locals.db; // your MySQL pool or connection passed via app.locals
   try {
-    const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ message: "Email already in use" });
+    const { name, email, password, role } = req.body;
+    const normalizedEmail = email.trim().toLowerCase();
 
-    const newUser = new User({ name, email, password, role });
-    await newUser.save();
+    console.log("Registering user with email:", normalizedEmail);
 
+    // Check if email already exists
+    const [existingUsers] = await db.query(
+      "SELECT * FROM users WHERE email = ?",
+      [normalizedEmail]
+    );
+
+    if (existingUsers.length > 0) {
+      return res.status(400).json({ message: "Email already in use" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert new user
+    const [result] = await db.query(
+      "INSERT INTO users (name, email, password, role, createdAt, updatedAt) VALUES (?, ?, ?, ?, NOW(), NOW())",
+      [name, normalizedEmail, hashedPassword, role || "user"]
+    );
+
+    // Get the inserted user info (exclude password)
+    const [newUserRows] = await db.query(
+      "SELECT id, name, email, role FROM users WHERE id = ?",
+      [result.insertId]
+    );
+    const newUser = newUserRows[0];
+
+    // Generate JWT token
     const token = generateToken(newUser);
+
     res.json({
       token,
-      user: { _id: newUser._id, name: newUser.name, email: newUser.email, role: newUser.role }
+      user: newUser,
     });
-  
-
   } catch (err) {
+    console.error("Register error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+// Login user
 exports.login = async (req, res) => {
-  const { email, password } = req.body;
+  const db = req.app.locals.db;
   try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Invalid email or password" });
+    const { email, password } = req.body;
+    const normalizedEmail = email.trim().toLowerCase();
 
+    // Find user by email
+    const [users] = await db.query("SELECT * FROM users WHERE email = ?", [
+      normalizedEmail,
+    ]);
+    if (users.length === 0)
+      return res.status(400).json({ message: "Invalid email or password" });
+
+    const user = users[0];
+
+    // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
+    if (!isMatch)
+      return res.status(400).json({ message: "Invalid email or password" });
+
+    // Remove password before sending
+    delete user.password;
 
     const token = generateToken(user);
+
     res.json({
       token,
-      user: {_id: user._id, name: user.name, email: user.email, role: user.role }
+      user,
     });
   } catch (err) {
+    console.error("Login error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Send Reset Link
+// Forgot password - send reset link
 exports.forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  const db = req.app.locals.db;
   try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const { email } = req.body;
+    const normalizedEmail = email.trim().toLowerCase();
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const [users] = await db.query("SELECT * FROM users WHERE email = ?", [
+      normalizedEmail,
+    ]);
+    if (users.length === 0)
+      return res.status(404).json({ message: "User not found" });
 
-    user.resetPasswordToken = token;
-    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
-    await user.save();
+    const user = users[0];
 
+    // Create token for reset, expires in 15 minutes
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+      expiresIn: "15m",
+    });
+    const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 min from now
+
+    // Save token and expiry to DB
+    await db.query(
+      "UPDATE users SET resetPasswordToken = ?, resetPasswordExpires = ? WHERE id = ?",
+      [token, expires, user.id]
+    );
+
+    // Setup mail transporter
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
+        pass: process.env.EMAIL_PASS,
+      },
     });
 
-    // const resetLink = `${process.env.CLIENT_URL}/reset-password/${token}`;
-    // Fix: Remove trailing slash from base URL or use this safe pattern
-const resetLink = `${process.env.CLIENT_URL}/reset/${token}`.replace(/([^:]\/)\/+/g, "$1");
+    const resetLink = `${process.env.CLIENT_URL}/reset/${token}`.replace(
+      /([^:]\/)\/+/g,
+      "$1"
+    );
 
-
+    // Send reset email
     await transporter.sendMail({
       from: `"Support" <${process.env.EMAIL_USER}>`,
       to: user.email,
@@ -85,40 +144,43 @@ const resetLink = `${process.env.CLIENT_URL}/reset/${token}`.replace(/([^:]\/)\/
       html: `
         <p>Click the link below to reset your password. This link will expire in 15 minutes:</p>
         <a href="${resetLink}">${resetLink}</a>
-      `
+      `,
     });
 
     res.json({ message: "Reset link sent to your email." });
-
   } catch (err) {
     console.error("Forgot password error:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Reset Password
+// Reset password
 exports.resetPassword = async (req, res) => {
-  const { token } = req.params;
-  const { password } = req.body;
-
+  const db = req.app.locals.db;
   try {
+    const { token } = req.params;
+    const { password } = req.body;
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await User.findOne({
-      _id: decoded.id,
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: Date.now() }
-    });
+    // Find user by id, token and check token expiry
+    const [users] = await db.query(
+      "SELECT * FROM users WHERE id = ? AND resetPasswordToken = ? AND resetPasswordExpires > NOW()",
+      [decoded.id, token]
+    );
 
-    if (!user) return res.status(400).json({ message: "Invalid or expired token" });
+    if (users.length === 0)
+      return res.status(400).json({ message: "Invalid or expired token" });
 
-    user.password = password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
-    await user.save();
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Update password and clear reset token fields
+    await db.query(
+      "UPDATE users SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE id = ?",
+      [hashedPassword, decoded.id]
+    );
 
     res.json({ message: "Password reset successful" });
-
   } catch (err) {
     console.error("Reset password error:", err);
     res.status(400).json({ message: "Invalid or expired token" });

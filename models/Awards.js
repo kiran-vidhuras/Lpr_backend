@@ -1,17 +1,42 @@
-// models/awardModel.js
-const mongoose = require("mongoose");
+const { DataTypes, Model } = require('sequelize');
+const sequelize = require('../config/database');
 
-const awardSchema = new mongoose.Schema(
-  {
-    title: { type: String, required: true },
-    year: { type: String, required: true },
-    awardedBy: { type: String },
-    awardedByTitle: { type: String },
-    category: { type: String, required: true },
-    image: { type: String }, // optional image URL or base64
-    description: { type: String, required: true },
+class Award extends Model {}
+
+Award.init({
+  title: {
+    type: DataTypes.STRING,
+    allowNull: false,
   },
-  { timestamps: true }
-);
+  year: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  awardedBy: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  awardedByTitle: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  category: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  image: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+}, {
+  sequelize,
+  modelName: 'Award',
+  tableName: 'awards',
+  timestamps: true,
+});
 
-module.exports = mongoose.model("Award", awardSchema);
+module.exports = Award;

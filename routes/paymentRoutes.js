@@ -1,17 +1,28 @@
 const express = require("express");
 const router = express.Router();
-const {
-  createOrder,
-  validatePayment,
-} = require("../controllers/paymentController");
+const { createOrder, validatePayment } = require("../controllers/paymentController");
+const { fetchAllPayments } = require("../services/razorpayService");
 
-// Create order route
+// Create order
 router.post("/order", createOrder);
 
-// Validate payment route (called after payment success)
+// Validate payment
 router.post("/order/validate", validatePayment);
 
+// Fetch all Razorpay payments
+router.get("/all", async (req, res) => {
+  try {
+    const allPayments = await fetchAllPayments();
+    res.json(allPayments);
+  } catch (err) {
+    console.error("Error fetching Razorpay payments:", err);
+    res.status(500).json({ error: "Failed to fetch payments" });
+  }
+});
+
 module.exports = router;
+
+
 
 // const express = require("express");
 // const {

@@ -1,251 +1,237 @@
-// const Razorpay = require("razorpay");
-// const crypto = require("crypto");
-// const Payment = require("../models/Payments");
-// const Product = require("../models/Product");
-
-// // Razorpay instance
-// const razorpay = new Razorpay({
-//   key_id: process.env.RAZORPAY_KEY_ID,
-//   key_secret: process.env.RAZORPAY_SECRET,
-// });
-
-// // Create order
-// exports.createOrder = async (req, res) => {
-//   try {
-//     const { amount, currency, receipt } = req.body;
-//     const options = { amount, currency, receipt };
-//     const order = await razorpay.orders.create(options);
-//     res.json(order);
-//   } catch (error) {
-//     console.error("Error creating order", error);
-//     res.status(500).json({ error: "Server Error" });
-//   }
-// };
-
-// // Validate payment & update stock (atomic)
-// exports.validatePayment = async (req, res) => {
-//   const {
-//     razorpay_order_id,
-//     razorpay_payment_id,
-//     razorpay_signature,
-//     cartItems,
-//   } = req.body;
-
-//   const shasum = crypto.createHmac("sha256", process.env.RAZORPAY_SECRET);
-//   shasum.update(`${razorpay_order_id}|${razorpay_payment_id}`);
-//   const digest = shasum.digest("hex");
-
-//   if (digest !== razorpay_signature) {
-//     return res
-//       .status(400)
-//       .json({ success: false, message: "Signature mismatch" });
-//   }
-
-//   try {
-//     if (!Array.isArray(cartItems) || cartItems.length === 0) {
-//       return res
-//         .status(400)
-//         .json({ success: false, message: "No cart items provided" });
-//     }
-
-//     await Payment.create({
-//       razorpay_order_id,
-//       razorpay_payment_id,
-//       razorpay_signature,
-//       cartItems,
-//     });
-
-//     for (const item of cartItems) {
-//       const productId = item.productId || item._id;
-
-//       const updatedProduct = await Product.findByIdAndUpdate(
-//         productId,
-//         { $inc: { quantity: -item.quantity } },
-//         { new: true }
-//       );
-
-//       if (!updatedProduct) {
-//         console.warn(`Product with ID ${productId} not found`);
-//         continue;
-//       }
-
-//       if (updatedProduct.quantity < 0) {
-//         console.warn(
-//           `Stock warning: Product ${updatedProduct.name} has negative stock!`
-//         );
-//       }
-//     }
-
-//     res.json({ success: true, message: "Payment verified & stock updated." });
-//   } catch (error) {
-//     console.error("Error validating payment", error);
-//     res.status(500).json({ error: "Server error" });
-//   }
-// };
-
+// controllers/paymentController.js
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
+const db = require("../config/database");
+const { QueryTypes } = require("sequelize");
+const FailedOrder = require("../models/FailedOrder");
+const ConfirmedOrder = require("../models/ConfirmedOrder");
 const Order = require("../models/Orders");
-const Payment = require("../models/Payments");
-const Address = require("../models/Address");
-
-const { sendUserEmail, sendAdminEmail } = require("../utils/sendOrderEmails");
-
+// Razorpay instance
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_SECRET,
 });
 
-// Create order
 exports.createOrder = async (req, res) => {
   try {
     const { amount, currency, receipt } = req.body;
-    const options = { amount, currency, receipt };
-    const order = await razorpay.orders.create(options);
+    const order = await razorpay.orders.create({ amount, currency, receipt, payment_capture: 1 });
     res.json(order);
-  } catch (error) {
-    console.error("Error creating order", error);
+  } catch (err) {
+    console.error("Error creating order:", err);
     res.status(500).json({ error: "Server Error" });
   }
 };
-
-// exports.validatePayment = async (req, res) => {
-//   const {
-//     razorpay_order_id,
-//     razorpay_payment_id,
-//     razorpay_signature,
-//     cartItems,
-//     userId,
-//     address,
-//   } = req.body;
-
-//   const shasum = crypto.createHmac("sha256", process.env.RAZORPAY_SECRET);
-//   shasum.update(`${razorpay_order_id}|${razorpay_payment_id}`);
-//   const digest = shasum.digest("hex");
-
-//   if (digest !== razorpay_signature) {
-//     return res
-//       .status(400)
-//       .json({ success: false, message: "Invalid signature" });
-//   }
-
-//   try {
-//     // ✅ Save Payment
-//     await Payment.create({
-//       cartItems,
-//       razorpay_order_id,
-//       razorpay_payment_id,
-//       razorpay_signature,
-//     });
-
-//     // ✅ Save/Update Address
-//     await Address.findOneAndUpdate(
-//       { userId: userId },
-//       { userId: userId, address },
-//       { upsert: true, new: true }
-//     );
-
-//     // ✅ Save Order
-//     const subTotal = cartItems.reduce((acc, item) => {
-//       const price = Number(item.price) || 0;
-//       const quantity = Number(item.quantity) || 0;
-//       return acc + price * quantity;
-//     }, 0);
-
-//     const gst = parseFloat((subTotal * 0.05).toFixed(2));
-//     const totalAmount = subTotal + gst;
-//     if (isNaN(totalAmount)) {
-//       console.error("❌ Invalid total amount (NaN). Check cart items.");
-//       return res
-//         .status(400)
-//         .json({ success: false, message: "Invalid total amount" });
-//     }
-
-//     const newOrder = new Order({
-//       user: userId,
-//       cartItems,
-//       amount: totalAmount,
-//       address,
-//       status: "Processing",
-//     });
-
-//     await newOrder.save();
-
-//     res.status(200).json({ success: true });
-//   } catch (err) {
-//     console.error("Error in validatePayment:", err);
-//     res
-//       .status(500)
-//       .json({ success: false, message: "Error saving payment/order" });
-//   }
-// };
 
 exports.validatePayment = async (req, res) => {
   const {
     razorpay_order_id,
     razorpay_payment_id,
     razorpay_signature,
-    cartItems,
+    cartItems = [],
     userId,
-    address,
-    totalAmount, // coming from frontend (already includes GST + delivery)
+    address = {},
+    totalAmount,
   } = req.body;
 
-  const shasum = crypto.createHmac("sha256", process.env.RAZORPAY_SECRET);
-  shasum.update(`${razorpay_order_id}|${razorpay_payment_id}`);
-  const digest = shasum.digest("hex");
+  const uid = Number(userId || 0);
+
+  // 🔑 Verify signature
+  const hmac = crypto.createHmac("sha256", process.env.RAZORPAY_SECRET);
+  hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+  const digest = hmac.digest("hex");
 
   if (digest !== razorpay_signature) {
-    return res
-      .status(400)
-      .json({ success: false, message: "Invalid signature" });
+    return res.status(400).json({ success: false, message: "Invalid signature" });
   }
 
+  const t = await db.transaction();
+try {
+  // ---- ADDRESS (insert or update)
+  let addressId;
+  const existing = await db.query(
+    `SELECT id FROM addresses WHERE user_id = :userId LIMIT 1`,
+    {
+      replacements: { userId: uid },
+      type: QueryTypes.SELECT,
+      transaction: t,
+    }
+  );
+
+  if (existing.length) {
+    addressId = existing[0].id;
+    await db.query(
+      `UPDATE addresses
+       SET first_name = :firstName, last_name = :lastName, email = :email, phone = :phone,
+           street = :street, city = :city, state = :state, zip = :zip, country = :country
+       WHERE id = :addressId`,
+      {
+        replacements: {
+          addressId,
+          firstName: address.firstName || null,
+          lastName: address.lastName || null,
+          email: address.email || null,
+          phone: address.phone || null,
+          street: address.street || null,
+          city: address.city || null,
+          state: address.state || null,
+          zip: address.zip || null,
+          country: address.country || null,
+        },
+        type: QueryTypes.UPDATE,
+        transaction: t,
+      }
+    );
+  } else {
+    await db.query(
+      `INSERT INTO addresses
+       (user_id, first_name, last_name, email, phone, street, city, state, zip, country)
+       VALUES (:userId, :firstName, :lastName, :email, :phone, :street, :city, :state, :zip, :country)`,
+      {
+        replacements: {
+          userId: uid,
+          firstName: address.firstName || null,
+          lastName: address.lastName || null,
+          email: address.email || null,
+          phone: address.phone || null,
+          street: address.street || null,
+          city: address.city || null,
+          state: address.state || null,
+          zip: address.zip || null,
+          country: address.country || null,
+        },
+        type: QueryTypes.INSERT,
+        transaction: t,
+      }
+    );
+
+    const rows = await db.query(`SELECT LAST_INSERT_ID() AS id`, {
+      type: QueryTypes.SELECT,
+      transaction: t,
+    });
+    addressId = rows[0].id;
+  }
+
+  // ---- ORDER
+  await db.query(
+    `INSERT INTO orders (user_id, address_id, total_amount, status, payment_status, razorpay_order_id)
+     VALUES (:userId, :addressId, :totalAmount, 'pending', 'pending', :rzpOrderId)`,
+    {
+      replacements: {
+        userId: uid,
+        addressId: Number(addressId || null),
+        totalAmount: Number(totalAmount || 0),
+        rzpOrderId: razorpay_order_id || "",
+      },
+      type: QueryTypes.INSERT,
+      transaction: t,
+    }
+  );
+
+  const orderRow = await db.query(`SELECT LAST_INSERT_ID() AS id`, {
+    type: QueryTypes.SELECT,
+    transaction: t,
+  });
+  const orderId = orderRow[0].id;
+
+  // ---- PAYMENT
+  await db.query(
+    `INSERT INTO payments
+     (order_id, payment_method, amount, transaction_id, phone, razorpay_payment_id, razorpay_signature)
+     VALUES (:orderId, :paymentMethod, :amount, :transactionId, :phone, :razorpayPaymentId, :razorpaySignature)`,
+    {
+      replacements: {
+        orderId,
+        paymentMethod: 'Razorpay',
+        amount: Number(totalAmount || 0),
+        transactionId: null,
+        phone: address.phone || null,
+        razorpayPaymentId: razorpay_payment_id || null,
+        razorpaySignature: razorpay_signature || null,
+      },
+      type: QueryTypes.INSERT,
+      transaction: t,
+    }
+  );
+
+  const paymentRow = await db.query(`SELECT LAST_INSERT_ID() AS id`, {
+    type: QueryTypes.SELECT,
+    transaction: t,
+  });
+  const paymentId = paymentRow[0].id;
+
+  // ---- ORDER ITEMS
+for (const item of cartItems || []) {
+  await db.query(
+    `INSERT INTO order_items
+       (order_id, product_id, variantId, quantity, price, variant_label, payment_id, created_at)
+     VALUES (:orderId, :productId, :variantId, :quantity, :price, :variantLabel, :paymentId, NOW())`,
+    {
+      replacements: {
+        orderId,
+        productId: item.product_id || null,
+        variantId: item.variantId || null,
+        quantity: item.quantity || 1,
+        price: item.price || 0,
+        variantLabel: item.variant_label || null,
+        paymentId,
+      },
+      type: QueryTypes.INSERT,
+      transaction: t,
+    }
+  );
+}
+
+
+
+  // ---- COMMIT
+await t.commit();
+
+// ---- LOG CONFIRMED ORDER
+await ConfirmedOrder.create({
+  user_id: uid,
+  amount: totalAmount || null,
+  address_json: JSON.stringify(address || {}),
+  cart_json: JSON.stringify(cartItems || []),
+  payment_id: razorpay_payment_id || null,
+  order_payment_id: razorpay_order_id || null,
+  signature: razorpay_signature || null,
+});
+
+res.json({
+  success: true,
+  message: "Order, payment, and order items created successfully.",
+  orderId,
+});
+
+  // ---- COMMIT
+  await t.commit();
+
+  res.json({
+    success: true,
+    message: "Order, payment, and order items created. Awaiting Razorpay webhook confirmation.",
+    orderId,
+  });
+
+} catch (err) {
   try {
-    await Payment.create({
-      cartItems,
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-    });
+    await t.rollback();
+  } catch {}
 
-    await Address.findOneAndUpdate(
-      { userId },
-      { userId, address },
-      { upsert: true, new: true }
-    );
+  console.error("Error validating payment:", err);
 
-    const newOrder = new Order({
-      user: userId,
-      cartItems,
-      amount: totalAmount, // ✅ this is final amount sent from frontend
-      address,
-      status: "Processing",
-    });
+  await FailedOrder.create({
+    user_id: uid,
+    amount: totalAmount || null,
+    reason: err?.message || "Unknown error",
+    address_json: JSON.stringify(address || {}),
+    cart_json: JSON.stringify(cartItems || []),
+    payment_id: razorpay_payment_id || null,
+    order_payment_id: razorpay_order_id || null,
+    signature: razorpay_signature || null,
+  });
 
-    await newOrder.save();
+  res.status(500).json({ success: false, message: "Payment validation failed" });
+}
 
-    await sendUserEmail(
-      address.email,
-      cartItems,
-      totalAmount,
-      address,
-      razorpay_payment_id,
-      razorpay_order_id
-    );
-    await sendAdminEmail(
-      cartItems,
-      totalAmount,
-      address,
-      razorpay_payment_id,
-      razorpay_order_id
-    );
-
-    res.status(200).json({ success: true });
-  } catch (err) {
-    console.error("Error in validatePayment:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Error saving payment/order" });
-  }
 };
