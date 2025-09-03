@@ -1,4 +1,4 @@
-const Award = require('../models/awards'); // Sequelize model
+const Award = require('../models/Awards'); // Sequelize model
 
 // GET all awards
 exports.getAllAwards = async (req, res) => {

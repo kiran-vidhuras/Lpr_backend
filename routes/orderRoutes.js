@@ -121,7 +121,8 @@ router.get("/", protect("admin"), async (req, res) => {
         name: order.name,
         email: order.email,
         role: order.role,
-      }
+      },
+      createdAt: order.created_at   // ✅ Added created_at explicitly
     }));
 
     res.json(formattedOrders);
@@ -130,6 +131,7 @@ router.get("/", protect("admin"), async (req, res) => {
     res.status(500).json({ message: "Failed to fetch orders" });
   }
 });
+
 module.exports = router;
 
 
