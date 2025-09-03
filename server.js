@@ -65,12 +65,21 @@ app.get("/test-razorpay", async (req, res) => {
 app.get("/api/payments/all", async (req, res) => {
   try {
     const Razorpay = require("razorpay");
+
+    // Create Razorpay instance using env vars
     const instance = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_SECRET,
-      
     });
 
+    // Debug: check if env vars are really available
+    ["RAZORPAY_KEY_ID", "RAZORPAY_SECRET"].forEach((key) => {
+      if (!process.env[key]) {
+        console.error(`❌ Missing env variable: ${key}`);
+      } else {
+        console.log(`✅ Loaded ${key}`);
+      }
+    });
     let allPayments = [];
     let options = { count: 100, skip: 0 };
 
