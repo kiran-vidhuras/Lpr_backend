@@ -1,7 +1,7 @@
 const { Sequelize, DataTypes, Model } = require('sequelize');
 
-const sequelize = new Sequelize('lprorganics', 'root', 'Vidhuras@123', {
-  host: 'localhost',
+const sequelize = new Sequelize('railway', 'root', 'oOeniOrYgTnCOWLgaYssTXvfUeCpQNLX', {
+  host: 'mysql-xawl.railway.internal',
   dialect: 'mysql',
 });
 
