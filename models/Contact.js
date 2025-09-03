@@ -1,16 +1,9 @@
 const { Sequelize, DataTypes, Model } = require('sequelize');
 
-// Initialize Sequelize (adjust credentials)
-// const sequelize = new Sequelize('u586534363_LPR_Organics', 'u586534363_lpr_organics', 'Lprorganics@123', {
-//   host: 'localhost',
-//   dialect: 'mysql',
-// });
-
 const sequelize = new Sequelize('lprorganics', 'root', 'Vidhuras@123', {
   host: 'localhost',
   dialect: 'mysql',
 });
-
 
 class Contact extends Model {}
 

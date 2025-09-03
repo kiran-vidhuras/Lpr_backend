@@ -1,6 +1,5 @@
-const Award = require('../models/Awards'); // Sequelize model
+const Award = require('../models/Awards'); 
 
-// GET all awards
 exports.getAllAwards = async (req, res) => {
   try {
     const awards = await Award.findAll({ order: [['year', 'DESC']] });
